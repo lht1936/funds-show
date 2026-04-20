@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import logging
 import uvicorn
 
@@ -8,11 +9,12 @@ from repo.config import get_settings
 from repo.database import engine, Base
 from repo.routers import router as fund_router
 from repo.scheduler import start_scheduler, shutdown_scheduler
+from repo.exceptions import FundShowException, create_error_response
 
 settings = get_settings()
 
 logging.basicConfig(
-    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
+    level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
@@ -42,9 +44,31 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+@app.exception_handler(FundShowException)
+async def fund_show_exception_handler(request: Request, exc: FundShowException):
+    logger.error(f"异常发生: {exc.error_code} - {exc.message}", extra=exc.details)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=create_error_response(exc)
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"未捕获的异常: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "UNEXPECTED_ERROR",
+                "message": "服务器内部错误",
+                "details": {}
+            }
+        }
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
