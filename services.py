@@ -4,8 +4,12 @@ from datetime import datetime
 import logging
 from repo.models import Fund, FundHolding
 from repo.data_fetcher import OverseasFundDataFetcher
+from repo.repositories import FundRepository, FundHoldingRepository
+from repo.exceptions import DataFetchError
+from repo.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class FundService:
@@ -13,49 +17,31 @@ class FundService:
     def __init__(self, db: Session):
         self.db = db
         self.fetcher = OverseasFundDataFetcher()
+        self.fund_repo = FundRepository(db)
+        self.holding_repo = FundHoldingRepository(db)
     
-    def get_fund_list(self, skip: int = 0, limit: int = 100, fund_type: Optional[str] = None) -> tuple:
-        query = self.db.query(Fund)
-        
-        if fund_type:
-            query = query.filter(Fund.fund_type.ilike(f"%{fund_type}%"))
-        
-        total = query.count()
-        funds = query.order_by(Fund.updated_at.desc()).offset(skip).limit(limit).all()
-        
-        return total, funds
+    def get_fund_list(self, skip: int = 0, limit: int = None, fund_type: Optional[str] = None) -> tuple:
+        if limit is None:
+            limit = settings.FUND_LIST_DEFAULT_LIMIT
+        return self.fund_repo.get_list(skip=skip, limit=limit, fund_type=fund_type)
     
     def get_fund_by_code(self, fund_code: str) -> Optional[Fund]:
-        return self.db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        return self.fund_repo.get_by_code(fund_code)
     
     def get_fund_holdings(self, fund_code: str) -> List[FundHolding]:
-        return self.db.query(FundHolding).filter(
-            FundHolding.fund_code == fund_code
-        ).order_by(FundHolding.holding_ratio.desc().nullslast()).all()
+        return self.holding_repo.get_by_fund_code(fund_code)
     
     def update_fund_data(self) -> dict:
         logger.info("开始更新基金数据...")
         
-        funds_data = self.fetcher.fetch_overseas_fund_list()
+        try:
+            funds_data = self.fetcher.fetch_overseas_fund_list()
+        except Exception as e:
+            logger.error(f"获取基金数据失败: {e}")
+            raise DataFetchError(source="overseas_fund_list", message=f"获取基金数据失败: {str(e)}")
         
-        updated_count = 0
-        new_count = 0
+        new_count, updated_count = self.fund_repo.bulk_upsert(funds_data)
         
-        for fund_data in funds_data:
-            existing_fund = self.get_fund_by_code(fund_data['fund_code'])
-            
-            if existing_fund:
-                for key, value in fund_data.items():
-                    if value is not None:
-                        setattr(existing_fund, key, value)
-                existing_fund.updated_at = datetime.utcnow()
-                updated_count += 1
-            else:
-                new_fund = Fund(**fund_data)
-                self.db.add(new_fund)
-                new_count += 1
-        
-        self.db.commit()
         logger.info(f"基金数据更新完成: 新增 {new_count} 条, 更新 {updated_count} 条")
         
         return {
@@ -67,22 +53,25 @@ class FundService:
     def update_fund_nav(self) -> dict:
         logger.info("开始更新基金净值...")
         
-        funds = self.db.query(Fund).all()
-        fund_codes = [f.fund_code for f in funds]
+        fund_codes = self.fund_repo.get_all_codes()
         
-        nav_data = self.fetcher.update_all_fund_nav(fund_codes)
+        try:
+            nav_data = self.fetcher.update_all_fund_nav(fund_codes)
+        except Exception as e:
+            logger.error(f"获取净值数据失败: {e}")
+            raise DataFetchError(source="fund_nav", message=f"获取净值数据失败: {str(e)}")
         
         updated_count = 0
         for code, nav in nav_data.items():
-            fund = self.get_fund_by_code(code)
+            fund = self.fund_repo.get_by_code(code)
             if fund:
-                fund.unit_nav = nav.get('unit_nav')
-                fund.accumulated_nav = nav.get('accumulated_nav')
-                fund.nav_date = nav.get('nav_date')
-                fund.updated_at = datetime.utcnow()
+                self.fund_repo.update(fund, {
+                    'unit_nav': nav.get('unit_nav'),
+                    'accumulated_nav': nav.get('accumulated_nav'),
+                    'nav_date': nav.get('nav_date')
+                })
                 updated_count += 1
         
-        self.db.commit()
         logger.info(f"基金净值更新完成: 更新 {updated_count} 条")
         
         return {
@@ -94,30 +83,26 @@ class FundService:
         logger.info("开始更新基金持仓数据...")
         
         if fund_code:
-            funds = [self.get_fund_by_code(fund_code)]
+            funds = [self.fund_repo.get_by_code(fund_code)]
             funds = [f for f in funds if f is not None]
         else:
-            funds = self.db.query(Fund).limit(50).all()
+            _, funds = self.fund_repo.get_list(limit=settings.HOLDINGS_UPDATE_LIMIT)
         
         total_holdings = 0
         updated_funds = 0
         
         for fund in funds:
-            holdings_data = self.fetcher.fetch_fund_holdings(fund.fund_code)
+            try:
+                holdings_data = self.fetcher.fetch_fund_holdings(fund.fund_code)
+            except Exception as e:
+                logger.error(f"获取基金 {fund.fund_code} 持仓失败: {e}")
+                continue
             
             if holdings_data:
-                self.db.query(FundHolding).filter(
-                    FundHolding.fund_code == fund.fund_code
-                ).delete()
-                
-                for holding_data in holdings_data:
-                    holding = FundHolding(**holding_data)
-                    self.db.add(holding)
-                    total_holdings += 1
-                
+                count = self.holding_repo.replace_holdings(fund.fund_code, holdings_data)
+                total_holdings += count
                 updated_funds += 1
         
-        self.db.commit()
         logger.info(f"基金持仓更新完成: 更新 {updated_funds} 只基金, 共 {total_holdings} 条持仓记录")
         
         return {

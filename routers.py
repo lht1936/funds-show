@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from repo.database import get_db
@@ -10,14 +10,18 @@ from repo.schemas import (
     FundHoldingResponse,
     MessageResponse
 )
+from repo.exceptions import FundNotFoundError, ValidationError, UpdateError
+from repo.config import get_settings
 
-router = APIRouter(prefix="/api/v1/funds", tags=["funds"])
+settings = get_settings()
+
+router = APIRouter(prefix=settings.API_PREFIX, tags=["funds"])
 
 
 @router.get("", response_model=FundListResponse, summary="获取基金列表")
 def get_fund_list(
     skip: int = Query(0, ge=0, description="跳过的记录数"),
-    limit: int = Query(20, ge=1, le=100, description="返回的记录数"),
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="返回的记录数"),
     fund_type: Optional[str] = Query(None, description="基金类型筛选"),
     db: Session = Depends(get_db)
 ):
@@ -39,7 +43,7 @@ def get_fund_detail(
     fund = service.get_fund_by_code(fund_code)
     
     if not fund:
-        raise HTTPException(status_code=404, detail=f"基金 {fund_code} 不存在")
+        raise FundNotFoundError(fund_code)
     
     holdings = service.get_fund_holdings(fund_code)
     
@@ -58,7 +62,7 @@ def get_fund_holdings(
     fund = service.get_fund_by_code(fund_code)
     
     if not fund:
-        raise HTTPException(status_code=404, detail=f"基金 {fund_code} 不存在")
+        raise FundNotFoundError(fund_code)
     
     holdings = service.get_fund_holdings(fund_code)
     
@@ -70,6 +74,13 @@ def trigger_update(
     update_type: str = Query("all", description="更新类型: all, funds, nav, holdings"),
     db: Session = Depends(get_db)
 ):
+    valid_types = ["all", "funds", "nav", "holdings"]
+    if update_type not in valid_types:
+        raise ValidationError(
+            field="update_type",
+            message=f"无效的更新类型，可选值: {', '.join(valid_types)}"
+        )
+    
     service = FundService(db)
     
     try:
@@ -97,7 +108,8 @@ def trigger_update(
                 message=f"持仓更新完成: {result}",
                 success=True
             )
-        else:
-            raise HTTPException(status_code=400, detail="无效的更新类型")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+        raise UpdateError(
+            update_type=update_type,
+            message=f"数据更新失败: {str(e)}"
+        )
