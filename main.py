@@ -5,17 +5,12 @@ import logging
 import uvicorn
 
 from repo.config import get_settings
-from repo.database import engine, Base
+from repo.database import init_db
 from repo.routers import router as fund_router
 from repo.scheduler import start_scheduler, shutdown_scheduler
+from repo.error_handlers import setup_exception_handlers
 
 settings = get_settings()
-
-logging.basicConfig(
-    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -23,8 +18,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("应用启动中...")
     
-    Base.metadata.create_all(bind=engine)
-    logger.info("数据库表创建完成")
+    init_db()
     
     start_scheduler()
     logger.info("定时任务调度器已启动")
@@ -36,11 +30,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="海外投资基金数据服务",
+    title=settings.APP_NAME,
     description="基于akshare获取海外投资基金净值和持仓信息，提供RESTful API接口",
-    version="1.0.0",
-    lifespan=lifespan
+    version=settings.APP_VERSION,
+    lifespan=lifespan,
+    debug=settings.DEBUG
 )
+
+setup_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
