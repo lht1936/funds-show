@@ -36,18 +36,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="海外投资基金数据服务",
-    description="基于akshare获取海外投资基金净值和持仓信息，提供RESTful API接口",
-    version="1.0.0",
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION,
     lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ALLOW_ORIGINS,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.CORS_ALLOW_METHODS,
+    allow_headers=settings.CORS_ALLOW_HEADERS,
 )
 
 app.include_router(fund_router)
@@ -56,9 +56,9 @@ app.include_router(fund_router)
 @app.get("/", tags=["root"])
 def root():
     return {
-        "message": "海外投资基金数据服务",
+        "message": settings.API_TITLE,
         "docs": "/docs",
-        "version": "1.0.0"
+        "version": settings.API_VERSION
     }
 
 

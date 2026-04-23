@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
 from services import FundService
+from config import get_settings
 from schemas import (
     FundResponse, 
     FundListResponse, 
@@ -11,7 +12,8 @@ from schemas import (
     MessageResponse
 )
 
-router = APIRouter(prefix="/api/v1/funds", tags=["funds"])
+settings = get_settings()
+router = APIRouter(prefix=settings.API_PREFIX, tags=["funds"])
 
 
 @router.get("", response_model=FundListResponse, summary="获取基金列表")

@@ -3,8 +3,10 @@ from apscheduler.triggers.cron import CronTrigger
 import logging
 from database import SessionLocal
 from services import FundService
+from config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 scheduler = BackgroundScheduler()
 
@@ -23,16 +25,20 @@ def update_fund_data_job():
 
 
 def start_scheduler():
+    if not settings.SCHEDULER_ENABLED:
+        logger.info("定时任务调度器已禁用")
+        return
+    
     scheduler.add_job(
         update_fund_data_job,
-        CronTrigger(hour=4, minute=0),
-        id="update_fund_data",
-        name="每天早上4点更新基金数据",
+        CronTrigger(hour=settings.SCHEDULER_HOUR, minute=settings.SCHEDULER_MINUTE),
+        id=settings.SCHEDULER_JOB_ID,
+        name=settings.SCHEDULER_JOB_NAME,
         replace_existing=True
     )
     
     scheduler.start()
-    logger.info("定时任务调度器已启动，将在每天早上4点更新基金数据")
+    logger.info(f"定时任务调度器已启动，将在每天 {settings.SCHEDULER_HOUR:02d}:{settings.SCHEDULER_MINUTE:02d} 更新基金数据")
 
 
 def shutdown_scheduler():

@@ -4,8 +4,10 @@ from datetime import datetime
 import logging
 from models import Fund, FundHolding
 from data_fetcher import OverseasFundDataFetcher
+from config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class FundService:
@@ -14,7 +16,9 @@ class FundService:
         self.db = db
         self.fetcher = OverseasFundDataFetcher()
     
-    def get_fund_list(self, skip: int = 0, limit: int = 100, fund_type: Optional[str] = None) -> tuple:
+    def get_fund_list(self, skip: int = 0, limit: int = None, fund_type: Optional[str] = None) -> tuple:
+        if limit is None:
+            limit = settings.DEFAULT_PAGE_LIMIT
         query = self.db.query(Fund)
         
         if fund_type:
@@ -97,7 +101,7 @@ class FundService:
             funds = [self.get_fund_by_code(fund_code)]
             funds = [f for f in funds if f is not None]
         else:
-            funds = self.db.query(Fund).limit(50).all()
+            funds = self.db.query(Fund).limit(settings.HOLDINGS_UPDATE_LIMIT).all()
         
         total_holdings = 0
         updated_funds = 0
