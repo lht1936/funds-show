@@ -1,8 +1,10 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
+import json
 
 
 class Settings(BaseSettings):
@@ -41,9 +43,36 @@ class Settings(BaseSettings):
     
     QDII_FUND_SYMBOL: str = "QDII基金"
     
+    @field_validator('CORS_ALLOW_ORIGINS', 'CORS_ALLOW_METHODS', 'CORS_ALLOW_HEADERS', mode='before')
+    @classmethod
+    def parse_list_from_env(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith('[') and v.endswith(']'):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in v.split(',') if item.strip()]
+        return v
+    
+    @field_validator('OVERSEAS_KEYWORDS', mode='before')
+    @classmethod
+    def parse_keywords_list(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith('[') and v.endswith(']'):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in v.split(',') if item.strip()]
+        return v
+    
     class Config:
         env_file = Path(__file__).parent / ".env"
         case_sensitive = True
+        env_file_encoding = 'utf-8'
     
     def get_holdings_year(self) -> int:
         if self.HOLDINGS_YEAR is not None:
