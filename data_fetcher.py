@@ -4,17 +4,18 @@ from typing import List, Dict, Optional
 from datetime import datetime
 import logging
 
+from config import get_settings
+
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class OverseasFundDataFetcher:
     
     def __init__(self):
-        self.overseas_keywords = [
-            'QDII', 'QDII-ETF', '海外', '港股', '美股', '纳斯达克', 
-            '标普', '恒生', '中概', '全球', '国际', '境外', '沪港深',
-            '香港', '美国', '欧洲', '日本', '新兴市场'
-        ]
+        self.overseas_keywords = settings.OVERSEAS_KEYWORDS
+        self.holdings_year = settings.get_holdings_year()
+        self.qdii_fund_symbol = settings.QDII_FUND_SYMBOL
     
     def is_overseas_fund(self, fund_name: str, fund_type: str = '') -> bool:
         if not fund_name:
@@ -27,7 +28,7 @@ class OverseasFundDataFetcher:
     
     def fetch_qdii_fund_list(self) -> pd.DataFrame:
         try:
-            df = ak.fund_etf_category_sina(symbol="QDII基金")
+            df = ak.fund_etf_category_sina(symbol=self.qdii_fund_symbol)
             if df is not None and not df.empty:
                 df['fund_code'] = df['代码'].astype(str)
                 df['fund_name'] = df['名称']
@@ -99,7 +100,7 @@ class OverseasFundDataFetcher:
     def fetch_fund_holdings(self, fund_code: str) -> List[Dict]:
         holdings = []
         try:
-            holdings_df = ak.fund_portfolio_em(code=fund_code, year="2024")
+            holdings_df = ak.fund_portfolio_em(code=fund_code, year=str(self.holdings_year))
             if holdings_df is not None and not holdings_df.empty:
                 for _, row in holdings_df.iterrows():
                     holding = {
