@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import logging
-from repo.models import Fund, FundHolding
-from repo.data_fetcher import OverseasFundDataFetcher
+from models import Fund, FundHolding
+from data_fetcher import OverseasFundDataFetcher
 
 logger = logging.getLogger(__name__)
 

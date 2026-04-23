@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Float, DateTime, Integer, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from repo.database import Base
+from database import Base
 
 
 class Fund(Base):

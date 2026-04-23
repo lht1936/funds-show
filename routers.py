@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from repo.database import get_db
-from repo.services import FundService
-from repo.schemas import (
+from database import get_db
+from services import FundService
+from schemas import (
     FundResponse, 
     FundListResponse, 
     FundDetailResponse, 

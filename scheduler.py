@@ -1,8 +1,8 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import logging
-from repo.database import SessionLocal
-from repo.services import FundService
+from database import SessionLocal
+from services import FundService
 
 logger = logging.getLogger(__name__)
 

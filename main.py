@@ -4,10 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 import uvicorn
 
-from repo.config import get_settings
-from repo.database import engine, Base
-from repo.routers import router as fund_router
-from repo.scheduler import start_scheduler, shutdown_scheduler
+from config import get_settings
+from database import engine, Base
+from routers import router as fund_router
+from scheduler import start_scheduler, shutdown_scheduler
 
 settings = get_settings()
 
@@ -69,7 +69,7 @@ def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "repo.main:app",
+        "main:app",
         host=settings.APP_HOST,
         port=settings.APP_PORT,
         reload=settings.DEBUG
